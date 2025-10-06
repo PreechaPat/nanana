@@ -1,0 +1,14 @@
+line-length = 120
+indent-width = 4
+
+target-version = "py310"
+
+[lint]
+select = ["E4", "E7", "E9", "F"] # F is pyflakes
+fixable = ["ALL"]
+unfixable = []
+
+[format]
+# Using black format style
+quote-style = "double"
+indent-style = "space"
