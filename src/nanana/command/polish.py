@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 
+import argparse
+import gzip
+import logging
 import os
+import shutil
 import subprocess
+import sys
+
 import pandas as pd
 import pysam
-import argparse
-from pathlib import Path
-import logging
-import gzip
-import shutil
+
+from nanana import __version__
 
 # Global Logger Setup
 def setup_logger(log_file: str):
@@ -142,9 +145,21 @@ def polish_cluster(cluster_dir: str, input_fastq: str):
 
     logger.info(f"Finished polishing {cluster_dir}")
 
+def _write_cluster_fastq(records: dict[str, dict[str, str]], output_path: str) -> str:
+    with open(output_path, "w") as handle:
+        for name, data in records.items():
+            handle.write(f"@{name}\n{data['sequence']}\n+\n{data['quality']}\n")
+    return output_path
+
 def extract_sequences(fastq_path, tsv_path, output_dir, cluster_id=None):
+    """
+    Extract sequences for the requested clusters into per-cluster FASTQ files.
+    """
     df = pd.read_csv(tsv_path, sep="\t")
-    cluster_ids = [int(cluster_id)] if cluster_id else sorted(df['hdbscan_id'].dropna().unique())
+    if cluster_id is not None:
+        cluster_ids = [int(cluster_id)]
+    else:
+        cluster_ids = sorted({int(cid) for cid in df['hdbscan_id'].dropna().unique()})
     logger.info(f"Processing {len(cluster_ids)} cluster(s): {cluster_ids}")
 
     fastq_records = {}
@@ -152,6 +167,7 @@ def extract_sequences(fastq_path, tsv_path, output_dir, cluster_id=None):
         for entry in fq:
             fastq_records[entry.name] = {"sequence": entry.sequence, "quality": entry.quality}
 
+    extracted_clusters: dict[int, dict[str, str]] = {}
     for cid in cluster_ids:
         cluster_dir = os.path.join(output_dir, f"cluster_{cid}")
         os.makedirs(cluster_dir, exist_ok=True)
@@ -164,26 +180,64 @@ def extract_sequences(fastq_path, tsv_path, output_dir, cluster_id=None):
             logger.warning(f"No sequences found for cluster {cid}")
             continue
 
-        polish_cluster(cluster_dir, fastq_path)
+        cluster_fastq_path = os.path.join(cluster_dir, "cluster_reads.fastq")
+        _write_cluster_fastq(cluster_seqs, cluster_fastq_path)
+        logger.info(f"Wrote {len(cluster_seqs)} sequences to {cluster_fastq_path}")
+        extracted_clusters[cid] = {
+            "cluster_dir": cluster_dir,
+            "fastq_path": cluster_fastq_path,
+        }
+
+    return extracted_clusters
+
+def polish_extracted_clusters(extracted_clusters: dict[int, dict[str, str]]):
+    """
+    Polish each cluster using the previously extracted FASTQ files.
+    """
+    for cid, metadata in extracted_clusters.items():
+        logger.info(f"Polishing cluster {cid}")
+        polish_cluster(metadata["cluster_dir"], metadata["fastq_path"])
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Extract and polish cluster reads.")
-    parser.add_argument("fastx", help="Input FASTA/FASTQ file")
-    parser.add_argument("--tsv", help="Cluster assignment file in TSV format")
-    parser.add_argument("-c", "--cluster", type=str, help="Optional cluster ID to process")
-    return parser.parse_args()
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Extract and polish cluster reads."
+    )
+    parser.add_argument(
+        "fastx",
+        help="Input FASTA/FASTQ file.",
+    )
+    parser.add_argument(
+        "--tsv",
+        required=True,
+        help="Cluster assignment file (TSV).",
+    )
+    parser.add_argument(
+        "-c",
+        "--cluster",
+        type=str,
+        help="Optional cluster ID to process.",
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"nanana-polish {__version__}",
+    )
+    return parser
 
-def main():
-
-    args = parse_args()
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
     tsv_file = args.tsv
     fastx_file = args.fastx
     output_root = "cluster_outputs"
     os.makedirs(output_root, exist_ok=True)
 
-    extract_sequences(fastx_file, tsv_file, output_root, args.cluster)
+    extracted_clusters = extract_sequences(fastx_file, tsv_file, output_root, args.cluster)
+    polish_extracted_clusters(extracted_clusters)
+
+    return 0
 
 if __name__ == "__main__":
-    main()
-
+    sys.exit(main())

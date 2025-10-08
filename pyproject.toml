@@ -13,7 +13,7 @@ requires = ["hatchling"]
 
 [project.scripts]
 nanana = "nanana.cli:main"
-nanana-clust = "nanana.command.cluster:main"
+nanana-cluster = "nanana.command.cluster:main"
 nanana-hydrate = "nanana.command.hydrate:main"
 nanana-plot = "nanana.command.plot:main"
 nanana-setup = "nanana.command.setup_taxonkit:main"

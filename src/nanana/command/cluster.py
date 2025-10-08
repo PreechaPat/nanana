@@ -8,6 +8,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from nanana import __version__
 from nanana.lib.cli_helpers import LOG_LEVEL_CHOICES, configure_logger
 from nanana.lib.cluster_pipeline import cluster_fastx
 
@@ -57,6 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="INFO",
         choices=LOG_LEVEL_CHOICES,
         help="Logging verbosity (default: INFO).",
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"nanana-cluster {__version__}",
     )
     return parser
 
