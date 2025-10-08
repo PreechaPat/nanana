@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from nanana import __version__
 from nanana.lib.cli_helpers import LOG_LEVEL_CHOICES, configure_logger
 from nanana.lib.hydrate import hydrate_clusters
 
@@ -30,25 +31,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output TSV containing per-read taxonomy metadata.",
     )
     parser.add_argument(
-        "--cluster-summary",
-        help="Optional TSV path for per-cluster taxonomy summary.",
-    )
-    parser.add_argument(
-        "--sample-size",
-        type=int,
-        default=5,
-        help="Number of reads to sample per cluster during voting (default: 5).",
-    )
-    parser.add_argument(
-        "--random-state",
-        type=int,
-        help="Random seed applied to sampling for reproducibility.",
-    )
-    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=LOG_LEVEL_CHOICES,
         help="Logging verbosity (default: INFO).",
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"nanana-hydrate {__version__}",
     )
     return parser
 
@@ -62,7 +54,6 @@ def main() -> int:
     clusters_path = Path(args.clusters).expanduser()
     dist_path = Path(args.dist).expanduser()
     output_path = Path(args.output).expanduser()
-    summary_path = Path(args.cluster_summary).expanduser() if args.cluster_summary else None
 
     try:
         cluster_df = pd.read_csv(clusters_path, sep="\t")
@@ -77,22 +68,13 @@ def main() -> int:
         return 1
 
     try:
-        hydrated_df, summary_df = hydrate_clusters(
-            cluster_df,
-            dist_df,
-            sample_size=args.sample_size,
-            random_state=args.random_state,
-        )
+        hydrated_df = hydrate_clusters(cluster_df, dist_df)
     except Exception as exc:  # pragma: no cover - CLI friendly failure.
         logger.error("Hydration failed: %s", exc)
         return 1
 
     hydrated_df.to_csv(output_path, sep="\t", index=False)
     logger.info("Hydrated assignments saved to %s", output_path)
-
-    if summary_path is not None:
-        summary_df.to_csv(summary_path, sep="\t", index_label="hdbscan_id")
-        logger.info("Cluster summary saved to %s", summary_path)
 
     return 0
 
