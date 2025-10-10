@@ -11,6 +11,8 @@ RUN pixi install -e prod
 # Create the shell-hook bash script to activate the environment
 RUN pixi shell-hook -e prod > /shell-hook.sh
 
+RUN echo 'export NUMBA_CACHE_DIR="/tmp/nanana-numba-cache"' >> /shell-hook.sh
+
 # extend the shell-hook script to run the command passed to the container
 RUN echo 'exec "$@"' >> /shell-hook.sh
 
@@ -19,6 +21,11 @@ FROM python:3.12-slim-bookworm AS production
 # Add ps, since nextflow need it...
 RUN apt-get update \
  && apt-get install -y --no-install-recommends procps
+
+
+# Add path
+ENV NUMBA_CACHE_DIR="/tmp/nanana-numba-cache"
+ENV PATH="/nanana/.pixi/envs/prod/bin:${PATH}"
 
 # only copy the production environment into prod container
 # please note that the "prefix" (path) needs to stay the same as in the build container
